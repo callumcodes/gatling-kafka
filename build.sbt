@@ -22,3 +22,8 @@ libraryDependencies ++= Seq(
 // Gatling contains scala-library
 assemblyOption in assembly := (assemblyOption in assembly).value
   .copy(includeScala = false)
+
+assemblyMergeStrategy in assembly := {
+  case PathList("META-INF", xs @ _*) => MergeStrategy.discard
+  case x => MergeStrategy.first
+}
