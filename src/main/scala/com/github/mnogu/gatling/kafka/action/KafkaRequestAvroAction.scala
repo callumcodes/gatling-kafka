@@ -67,7 +67,7 @@ class KafkaRequestAvroAction[K, V](val producer: KafkaProducer[K, GenericRecord]
     kafkaAttributes payload session map { payload =>
 
 
-      val input = AvroInputStream.json[V].from(payload.getBytes("UTF-8")).build
+      val input = AvroInputStream.json[V].from(payload.getBytes("UTF-8")).build(kafkaAttributes.schema, kafkaAttributes.schema)
       val payloadParsed: V = input.iterator.toList.head
       input.close()
 

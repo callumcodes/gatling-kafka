@@ -1,10 +1,12 @@
 package com.github.mnogu.gatling.kafka.test
 
 import com.github.mnogu.gatling.kafka.Predef._
-import com.sksamuel.avro4s.{Decoder, RecordFormat}
+import com.sksamuel.avro4s.{AvroSchema, Decoder, RecordFormat, SchemaFor}
 import com.typesafe.config.ConfigFactory
 import io.gatling.core.Predef._
+import org.apache.avro.Schema
 import org.apache.kafka.clients.producer.ProducerConfig
+
 import scala.concurrent.duration._
 
 class AvroSimulation extends Simulation {
@@ -37,8 +39,8 @@ class AvroSimulation extends Simulation {
   val json = "{\"name\":\"ennio morricone\",\"birthplace\":\"rome\",\"compositions\":[\"legend of 1900\",\"ecstasy of gold\"]}"
 
   val recordFormat = RecordFormat[Composer]
+  val schema: Schema = AvroSchema[Composer]
   val decoder = Decoder[Composer]
-
 
   val kafkaConf = kafka
     // Kafka topic name
@@ -49,7 +51,7 @@ class AvroSimulation extends Simulation {
   val scn = scenario("Kafka Test")
     .exec(
       kafka("request")
-        .sendAvro[String, Composer]("${key}", json)(recordFormat, decoder)
+        .sendAvro[String, Composer]("${key}", json)(recordFormat, decoder, schema)
     )
 
   setUp(
