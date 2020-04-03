@@ -1,8 +1,9 @@
 package com.github.mnogu.gatling.kafka.action
 
 import com.github.mnogu.gatling.kafka.protocol.KafkaProtocol
-import com.github.mnogu.gatling.kafka.request.builder.{KafkaAttributes, KafkaAvroAttributes}
-import com.sksamuel.avro4s.{AvroInputStream, Decoder, Encoder, Record, RecordFormat}
+import com.github.mnogu.gatling.kafka.request.builder.KafkaAvroAttributes
+import com.sksamuel.avro4s
+import com.sksamuel.avro4s.{AvroInputStream, Decoder, RecordFormat}
 import io.gatling.commons.stats.{KO, OK}
 import io.gatling.commons.util.DefaultClock
 import io.gatling.commons.validation.Validation
@@ -10,14 +11,11 @@ import io.gatling.core.CoreComponents
 import io.gatling.core.action.{Action, ExitableAction}
 import io.gatling.core.session._
 import io.gatling.core.util.NameGen
+import org.apache.avro.Schema
 import org.apache.avro.generic.GenericRecord
 import org.apache.kafka.clients.producer._
-import com.sksamuel.avro4s.RecordFormat._
 
-import scala.collection.Set
-import scala.collection.immutable.Set
-import scala.util.Success
-
+import scala.util.{Failure, Success, Try}
 
 
 class KafkaRequestAvroAction[K, V](val producer: KafkaProducer[K, GenericRecord],
@@ -30,6 +28,7 @@ class KafkaRequestAvroAction[K, V](val producer: KafkaProducer[K, GenericRecord]
 
   implicit val format: RecordFormat[V] = kafkaAttributes.recordFormat
   implicit val decoder: Decoder[V] = kafkaAttributes.decoder
+  implicit val schema: Schema = kafkaAttributes.schema
 
   val statsEngine = coreComponents.statsEngine
   val clock = new DefaultClock
@@ -66,22 +65,27 @@ class KafkaRequestAvroAction[K, V](val producer: KafkaProducer[K, GenericRecord]
 
     kafkaAttributes payload session map { payload =>
 
-
-      val input = AvroInputStream.json[V].from(payload.getBytes("UTF-8")).build(kafkaAttributes.schema, kafkaAttributes.schema)
-      val payloadParsed: V = input.iterator.toList.head
+      val input = AvroInputStream.json[V].from(payload.getBytes("UTF-8")).build(schema, schema)
+      val inputParsed: Seq[Try[V]] = input.tryIterator.toList
       input.close()
 
-      val recordValue: GenericRecord = format.to(payloadParsed)
-      val record = kafkaAttributes.key match {
-        case Some(k) =>
-          new ProducerRecord[K, GenericRecord](kafkaProtocol.topic, k(session).toOption.get, recordValue)
-        case None =>
-          new ProducerRecord[K, GenericRecord](kafkaProtocol.topic, recordValue)
+      val record: ProducerRecord[K, GenericRecord] = inputParsed match {
+        case Nil => logger.error("Unable to parse json"); throw new Exception("Json is not valid")
+        case Failure(ex) :: Nil => logger.error(s"Unable to parse json ${ex.getMessage}", ex); throw ex
+        case Success(entity) :: Nil => {
+          val recordValue: GenericRecord = format.to(entity)
+          kafkaAttributes.key match {
+            case Some(k) =>
+              new ProducerRecord[K, GenericRecord](kafkaProtocol.topic, k(session).toOption.get, recordValue)
+            case None =>
+              new ProducerRecord[K, GenericRecord](kafkaProtocol.topic, recordValue)
+          }
+        }
       }
 
       val requestStartDate = clock.nowMillis
 
-      producer.send (record, (m: RecordMetadata, e: Exception) => {
+      producer.send(record, (m: RecordMetadata, e: Exception) => {
 
         val requestEndDate = clock.nowMillis
         statsEngine.logResponse(
@@ -99,7 +103,6 @@ class KafkaRequestAvroAction[K, V](val producer: KafkaProducer[K, GenericRecord]
         } else {
           next ! session
         }
-
       })
 
     }

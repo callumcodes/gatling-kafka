@@ -36,7 +36,7 @@ class AvroSimulation extends Simulation {
   Note: Avro4s requires that all JSON fields are provided, otherwise you'll get an unsupported list exception
   */
 
-  val json = "{\"name\":\"ennio morricone\",\"birthplace\":\"rome\",\"compositions\":[\"legend of 1900\",\"ecstasy of gold\"]}"
+  val json = """{"name":{"string":"ennio morricone"},"birthplace":{"string":"rome"},"compositions":["ecstasy of gold"]}"""
 
   val recordFormat = RecordFormat[Composer]
   val schema: Schema = AvroSchema[Composer]
